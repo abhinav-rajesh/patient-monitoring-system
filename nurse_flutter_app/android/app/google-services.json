@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "980532279537",
+    "project_id": "patient-health-monitorin-553f1",
+    "storage_bucket": "patient-health-monitorin-553f1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:980532279537:android:ce3de9275c95ad42e79150",
+        "android_client_info": {
+          "package_name": "com.example.nurse_flutter_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA7leb9edf-GRZvfCbq4H6_SNUfrh1fLNU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

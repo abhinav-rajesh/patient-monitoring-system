@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedWatch – Nurse Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <!-- NOTE: dashboard.js defines showToast(alertObject) for socket alerts.
+       Admin modals use adminToast(msg, type) to avoid naming conflict. -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ── Modal Base ──────────────────────────────────────────────────────────── */
+    .mw-modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(15,23,42,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+    }
+    .mw-modal-overlay.open { display: flex; }
+
+    .mw-modal {
+      background: #1e293b;
+      border: 1px solid rgba(99,102,241,0.25);
+      border-radius: 14px;
+      padding: 28px 32px;
+      width: 100%;
+      max-width: 480px;
+      color: #e2e8f0;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+    }
+    .mw-modal h3 {
+      margin: 0 0 20px;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mw-modal h3 .mw-icon { font-size: 1.3em; }
+
+    .mw-field { margin-bottom: 14px; }
+    .mw-field label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-bottom: 5px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .mw-field input, .mw-field select {
+      width: 100%;
+      padding: 9px 12px;
+      background: #0f172a;
+      border: 1px solid rgba(148,163,184,0.2);
+      border-radius: 7px;
+      color: #e2e8f0;
+      font-size: 0.9rem;
+      font-family: inherit;
+      transition: border-color 0.2s;
+      box-sizing: border-box;
+    }
+    .mw-field input:focus, .mw-field select:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+    .mw-field input::placeholder { color: #475569; }
+    .mw-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    .mw-btn-row { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+    .mw-btn {
+      padding: 9px 20px;
+      border-radius: 7px;
+      border: none;
+      font-weight: 600;
+      font-size: 0.88rem;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    .mw-btn-primary { background: linear-gradient(135deg,#6366f1,#3b82f6); color: white; }
+    .mw-btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+    .mw-btn-secondary { background: rgba(148,163,184,0.12); color: #94a3b8; border: 1px solid rgba(148,163,184,0.2); }
+    .mw-btn-secondary:hover { background: rgba(148,163,184,0.2); }
+    .mw-btn-danger { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+    .mw-btn-danger:hover { background: rgba(239,68,68,0.25); }
+
+    .mw-divider { border: none; border-top: 1px solid rgba(148,163,184,0.1); margin: 14px 0; }
+
+    /* ── Admin sidebar buttons ───────────────────────────────────────────────── */
+    .admin-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      margin-bottom: 6px;
+      background: rgba(99,102,241,0.1);
+      color: #a5b4fc;
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.84rem;
+      font-weight: 600;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    .admin-btn:hover { background: rgba(99,102,241,0.2); color: #c7d2fe; }
+
+    /* ── Bystander info on card ──────────────────────────────────────────────── */
+    .bystander-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(245,158,11,0.08);
+      border: 1px solid rgba(245,158,11,0.2);
+      border-radius: 7px;
+      margin-bottom: 10px;
+      font-size: 0.82rem;
+      color: #fbbf24;
+    }
+    .bystander-info svg { flex-shrink: 0; }
+    .bystander-info .by-label { color: #94a3b8; margin-right: 4px; }
+
+    /* ── Card action buttons ─────────────────────────────────────────────────── */
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .card-actions .btn-ai-analyze { flex: 1; }
+    .card-btn-report {
+      padding: 8px 13px;
+      border-radius: 7px;
+      border: 1px solid rgba(99,102,241,0.3);
+      background: rgba(99,102,241,0.1);
+      color: #a5b4fc;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      display: flex; align-items: center; gap: 5px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .card-btn-report:hover { background: rgba(99,102,241,0.2); }
+    .card-btn-discharge {
+      padding: 8px 13px;
+      border-radius: 7px;
+      border: 1px solid rgba(239,68,68,0.3);
+      background: rgba(239,68,68,0.08);
+      color: #f87171;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex; align-items: center; gap: 5px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .card-btn-discharge:hover { background: rgba(239,68,68,0.18); }
+
+    /* ── Toast ───────────────────────────────────────────────────────────────── */
+    .mw-toast {
+      position: fixed; bottom: 28px; right: 28px; z-index: 99999;
+      padding: 12px 20px; border-radius: 9px;
+      font-family: inherit; font-size: 0.88rem; font-weight: 500;
+      color: white; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      animation: slideIn 0.3s ease;
+    }
+    .mw-toast.success { background: linear-gradient(135deg,#059669,#10b981); }
+    .mw-toast.error   { background: linear-gradient(135deg,#dc2626,#ef4444); }
+    @keyframes slideIn { from { transform: translateY(30px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+  </style>
+</head>
+<body class="dash-body">
+
+  <!-- ── Header ────────────────────────────────────────────────────────────── -->
+  <header class="dash-header" id="dashHeader">
+    <div class="header-left">
+      <div class="brand-icon-sm">
+        <svg width="28" height="28" viewBox="0 0 36 36" fill="none">
+          <rect width="36" height="36" rx="9" fill="url(#hGrad)"/>
+          <defs>
+            <linearGradient id="hGrad" x1="0" y1="0" x2="36" y2="36">
+              <stop offset="0%" stop-color="#06b6d4"/>
+              <stop offset="100%" stop-color="#3b82f6"/>
+            </linearGradient>
+          </defs>
+          <path d="M18 8v20M8 18h20" stroke="white" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div>
+        <span class="header-brand">MedWatch</span>
+        <span class="header-role">Nurse Dashboard</span>
+      </div>
+    </div>
+
+    <nav class="header-center">
+      <div class="live-indicator">
+        <span class="pulse-dot"></span>
+        <span>LIVE</span>
+      </div>
+      <div class="header-time" id="headerTime">--:--:--</div>
+    </nav>
+
+    <div class="header-right">
+      <div class="nurse-badge">
+        <div class="nurse-avatar">{{ nurse_name[0] }}</div>
+        <div class="nurse-info">
+          <span class="nurse-name">{{ nurse_name }}</span>
+          <span class="nurse-id">{{ nurse_id }}</span>
+        </div>
+      </div>
+      <a href="/mobile" target="_blank" class="btn-mobile-view" title="Open Mobile Alert Page">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+        </svg>
+        Mobile
+      </a>
+      <a href="/logout" class="btn-logout" id="logoutBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+        Logout
+      </a>
+    </div>
+  </header>
+
+  <!-- ── Main Layout ────────────────────────────────────────────────────────── -->
+  <div class="dash-layout">
+
+    <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+    <aside class="dash-sidebar">
+
+      <!-- Admin Controls -->
+      <div class="sidebar-section">
+        <p class="sidebar-label">Admin Controls</p>
+        <button class="admin-btn" onclick="openModal('addPatientModal')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          Add Patient
+        </button>
+        <button class="admin-btn" onclick="openModal('addNurseModal')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Add Nurse
+        </button>
+        <button class="admin-btn" onclick="openModal('allotModal')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Allot Patient
+        </button>
+      </div>
+
+      <!-- My Patients -->
+      <div class="sidebar-section">
+        <p class="sidebar-label">My Patients</p>
+        <div id="patientNavList">
+          {% for p in patients %}
+          <button class="patient-nav-item active" id="nav-{{ p.id }}" onclick="scrollToPatient('{{ p.id }}')">
+            <span class="pnav-avatar">{{ p.full_name[0] }}</span>
+            <div class="pnav-info">
+              <span class="pnav-name">{{ p.full_name }}</span>
+              <span class="pnav-ward">{{ p.ward }} · Bed {{ p.bed }}</span>
+            </div>
+            <span class="pnav-status-dot" id="nav-dot-{{ p.id }}"></span>
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Alert Feed -->
+      <div class="sidebar-section">
+        <p class="sidebar-label">Alert Feed</p>
+        <div class="alert-feed" id="alertFeed">
+          <p class="feed-empty">No active alerts</p>
+        </div>
+      </div>
+
+      <div class="sidebar-stats">
+        <div class="stat-item">
+          <span class="stat-value" id="statPatients">{{ patients|length }}</span>
+          <span class="stat-label">Patients</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value" id="statAlerts">0</span>
+          <span class="stat-label">Alerts</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Main Content ────────────────────────────────────────────────────── -->
+    <main class="dash-main">
+      <div class="summary-bar">
+        <h2 class="section-title">Patient Monitoring</h2>
+        <div class="connection-status" id="connStatus">
+          <span class="dot connecting"></span>
+          <span id="connText">Connecting…</span>
+        </div>
+      </div>
+
+      <div class="toast-container" id="toastContainer"></div>
+
+      <!-- Patient Cards -->
+      <div class="patient-grid" id="patientGrid">
+        {% for p in patients %}
+        <div class="patient-card" id="card-{{ p.id }}" data-patient="{{ p.id }}">
+
+          <!-- Card Header -->
+          <div class="card-header">
+            <div class="card-patient-info">
+              <div class="card-avatar">{{ p.full_name[0] }}</div>
+              <div>
+                <h3 class="card-name">{{ p.full_name }}</h3>
+                <p class="card-meta">{{ p.condition }} · Age {{ p.age }} · Bed {{ p.bed }}</p>
+              </div>
+            </div>
+            <div class="card-status-badge" id="badge-{{ p.id }}">
+              <span class="badge-dot"></span>
+              <span class="badge-text">STABLE</span>
+            </div>
+          </div>
+
+          <!-- Bystander / Emergency Contact -->
+          {% if p.bystander_name or p.bystander_number %}
+          <div class="bystander-info">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>
+            <span><span class="by-label">Emergency:</span>
+            {% if p.bystander_name %}{{ p.bystander_name }}{% endif %}
+            {% if p.bystander_number %} · <a href="tel:{{ p.bystander_number }}" style="color:#fbbf24;">{{ p.bystander_number }}</a>{% endif %}
+            </span>
+          </div>
+          {% endif %}
+
+          <!-- Vitals Grid -->
+          <div class="vitals-grid">
+            <div class="vital-tile" id="tile-heart_rate-{{ p.id }}">
+              <div class="vital-icon heart">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+              </div>
+              <div class="vital-data">
+                <span class="vital-value" id="hr-{{ p.id }}">--</span>
+                <span class="vital-unit">bpm</span>
+              </div>
+              <span class="vital-label">Heart Rate</span>
+              <div class="vital-bar"><div class="vital-bar-fill" id="hr-bar-{{ p.id }}"></div></div>
+            </div>
+
+            <div class="vital-tile" id="tile-spo2-{{ p.id }}">
+              <div class="vital-icon oxygen">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/>
+                </svg>
+              </div>
+              <div class="vital-data">
+                <span class="vital-value" id="spo2-{{ p.id }}">--</span>
+                <span class="vital-unit">%</span>
+              </div>
+              <span class="vital-label">SpO₂</span>
+              <div class="vital-bar"><div class="vital-bar-fill" id="spo2-bar-{{ p.id }}"></div></div>
+            </div>
+
+            <div class="vital-tile" id="tile-temperature-{{ p.id }}">
+              <div class="vital-icon temp">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+                </svg>
+              </div>
+              <div class="vital-data">
+                <span class="vital-value" id="temp-{{ p.id }}">--</span>
+                <span class="vital-unit">°C</span>
+              </div>
+              <span class="vital-label">Temperature</span>
+              <div class="vital-bar"><div class="vital-bar-fill" id="temp-bar-{{ p.id }}"></div></div>
+            </div>
+
+            <div class="vital-tile" id="tile-blood_pressure-{{ p.id }}">
+              <div class="vital-icon bp">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+              </div>
+              <div class="vital-data">
+                <span class="vital-value" id="bp-{{ p.id }}">--</span>
+                <span class="vital-unit">mmHg</span>
+              </div>
+              <span class="vital-label">Blood Pressure</span>
+              <div class="vital-bar"><div class="vital-bar-fill" id="bp-bar-{{ p.id }}"></div></div>
+            </div>
+          </div>
+
+          <!-- Live Chart -->
+          <div class="chart-section">
+            <div class="chart-header">
+              <span class="chart-title">Heart Rate – Live</span>
+              <span class="chart-badge">2s interval</span>
+            </div>
+            <div class="chart-wrapper">
+              <canvas id="chart-{{ p.id }}" aria-label="Heart rate chart for {{ p.full_name }}"></canvas>
+            </div>
+          </div>
+
+          <!-- Alert Banner -->
+          <div class="card-alert-banner" id="alert-banner-{{ p.id }}" style="display:none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            </svg>
+            <span id="alert-banner-text-{{ p.id }}"></span>
+          </div>
+
+          <!-- Card Actions -->
+          <div class="card-actions">
+            <button class="btn-ai-analyze" onclick="analyzePatient('{{ p.id }}', '{{ p.full_name }}')">
+              <span class="ai-sparkle">✨</span> AI Analysis
+            </button>
+            <a href="/report/{{ p.id }}" target="_blank" class="card-btn-report">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Report
+            </a>
+            <button class="card-btn-discharge" onclick="dischargePatient('{{ p.id }}', '{{ p.full_name }}')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              Discharge
+            </button>
+          </div>
+
+        </div>
+        {% endfor %}
+      </div>
+    </main>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       MODALS
+  ══════════════════════════════════════════════════════════════════════════ -->
+
+  <!-- ── Add Patient Modal ───────────────────────────────────────────────────── -->
+  <div class="mw-modal-overlay" id="addPatientModal">
+    <div class="mw-modal">
+      <h3><span class="mw-icon">🧑‍⚕️</span> Add New Patient</h3>
+
+      <div class="mw-field-row">
+        <div class="mw-field">
+          <label>Patient ID *</label>
+          <input type="text" id="np_id" placeholder="e.g. P004" />
+        </div>
+        <div class="mw-field">
+          <label>Short Name *</label>
+          <input type="text" id="np_name" placeholder="e.g. Patient D" />
+        </div>
+      </div>
+      <div class="mw-field">
+        <label>Full Name *</label>
+        <input type="text" id="np_full_name" placeholder="e.g. David Singh" />
+      </div>
+      <div class="mw-field-row">
+        <div class="mw-field">
+          <label>Age *</label>
+          <input type="number" id="np_age" placeholder="e.g. 58" min="0" max="120" />
+        </div>
+        <div class="mw-field">
+          <label>Ward *</label>
+          <input type="text" id="np_ward" placeholder="e.g. ICU" />
+        </div>
+      </div>
+      <div class="mw-field-row">
+        <div class="mw-field">
+          <label>Bed *</label>
+          <input type="text" id="np_bed" placeholder="e.g. 3A" />
+        </div>
+        <div class="mw-field">
+          <label>Condition *</label>
+          <input type="text" id="np_condition" placeholder="e.g. Cardiac Monitoring" />
+        </div>
+      </div>
+      <hr class="mw-divider">
+      <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;">📞 Emergency / Bystander Contact</p>
+      <div class="mw-field-row">
+        <div class="mw-field">
+          <label>Bystander Name</label>
+          <input type="text" id="np_bystander_name" placeholder="e.g. John Doe" />
+        </div>
+        <div class="mw-field">
+          <label>Bystander Phone</label>
+          <input type="tel" id="np_bystander_number" placeholder="e.g. 9876543210" />
+        </div>
+      </div>
+
+      <div class="mw-btn-row">
+        <button class="mw-btn mw-btn-secondary" onclick="closeModal('addPatientModal')">Cancel</button>
+        <button class="mw-btn mw-btn-primary" onclick="submitPatient()">💾 Save Patient</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Add Nurse Modal ─────────────────────────────────────────────────────── -->
+  <div class="mw-modal-overlay" id="addNurseModal">
+    <div class="mw-modal">
+      <h3><span class="mw-icon">👩‍⚕️</span> Add New Nurse</h3>
+
+      <div class="mw-field">
+        <label>Nurse ID *</label>
+        <input type="text" id="nn_id" placeholder="e.g. nurse3 (no spaces)" />
+      </div>
+      <div class="mw-field">
+        <label>Full Name *</label>
+        <input type="text" id="nn_name" placeholder="e.g. Anna Williams" />
+      </div>
+      <div class="mw-field">
+        <label>Password *</label>
+        <input type="password" id="nn_pass" placeholder="Set a secure password" />
+      </div>
+
+      <div class="mw-btn-row">
+        <button class="mw-btn mw-btn-secondary" onclick="closeModal('addNurseModal')">Cancel</button>
+        <button class="mw-btn mw-btn-primary" onclick="submitNurse()">💾 Save Nurse</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Allot Patient Modal ─────────────────────────────────────────────────── -->
+  <div class="mw-modal-overlay" id="allotModal">
+    <div class="mw-modal">
+      <h3><span class="mw-icon">🔗</span> Allot Patient to Nurse</h3>
+      <p style="font-size:0.83rem;color:#64748b;margin:0 0 18px;">Assign any existing patient to a nurse. The patient's vitals will appear on their dashboard.</p>
+
+      <div class="mw-field">
+        <label>Select Nurse *</label>
+        <select id="al_nurse_id">
+          <option value="">— Choose a Nurse —</option>
+        </select>
+      </div>
+      <div class="mw-field">
+        <label>Select Patient *</label>
+        <select id="al_patient_id">
+          <option value="">— Choose a Patient —</option>
+        </select>
+      </div>
+
+      <div class="mw-btn-row">
+        <button class="mw-btn mw-btn-secondary" onclick="closeModal('allotModal')">Cancel</button>
+        <button class="mw-btn mw-btn-primary" onclick="submitAllotment()">🔗 Allot</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── AI Analysis Modal ───────────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="aiModal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title"><span class="ai-sparkle">✨</span> AI Smart Analysis</h3>
+        <button class="modal-close" onclick="closeAiModal()">×</button>
+      </div>
+      <div class="modal-body" id="aiModalBody">
+        <div class="ai-loading">
+          <span class="pulse-dot"></span> Generating insights...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Thresholds & Patient Data for JS ────────────────────────────────────── -->
+  <script id="thresholdData"   type="application/json">{{ thresholds | tojson }}</script>
+  <script id="normalRangeData" type="application/json">{{ normal_ranges | tojson }}</script>
+  <script id="patientData"     type="application/json">{{ patients | tojson }}</script>
+  <script>const NURSE_ID = "{{ nurse_id }}";</script>
+  <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+
+  <!-- ── Feature Scripts ────────────────────────────────────────────────────── -->
+  <script>
+    /* ── Modal helpers ───────────────────────────────────────────────────── */
+    function openModal(id) {
+      document.getElementById(id).classList.add('open');
+      if (id === 'allotModal') populateAllotSelects();
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('open');
+    }
+    // Close on backdrop click
+    document.querySelectorAll('.mw-modal-overlay').forEach(el => {
+      el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+    });
+
+    /* ── Admin Toast (separate from socket alert toasts in dashboard.js) ─── */
+    function adminToast(msg, type = 'success') {
+      const t = document.createElement('div');
+      t.className = `mw-toast ${type}`;
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3200);
+    }
+
+    /* ── Add Patient ─────────────────────────────────────────────────────── */
+    async function submitPatient() {
+      const data = {
+        id:               document.getElementById('np_id').value.trim(),
+        name:             document.getElementById('np_name').value.trim(),
+        full_name:        document.getElementById('np_full_name').value.trim(),
+        age:              parseInt(document.getElementById('np_age').value),
+        ward:             document.getElementById('np_ward').value.trim(),
+        bed:              document.getElementById('np_bed').value.trim(),
+        condition:        document.getElementById('np_condition').value.trim(),
+        bystander_name:   document.getElementById('np_bystander_name').value.trim(),
+        bystander_number: document.getElementById('np_bystander_number').value.trim(),
+      };
+
+      if (!data.id || !data.name || !data.full_name || !data.age || !data.ward || !data.bed || !data.condition) {
+        adminToast('Please fill all required fields (*)', 'error'); return;
+      }
+
+      try {
+        const res = await fetch('/api/patient', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)
+        });
+        const json = await res.json();
+        if (res.ok) {
+          // Auto-allot to current nurse (exclusive)
+          await fetch('/api/allot', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({nurse_id: NURSE_ID, patient_id: data.id})
+          });
+          adminToast('✅ Patient "' + data.full_name + '" added & allotted!');
+          closeModal('addPatientModal');
+          setTimeout(() => window.location.reload(), 1500);
+        } else {
+          adminToast(json.error || 'Error adding patient', 'error');
+        }
+      } catch (err) { adminToast('Network error', 'error'); console.error(err); }
+    }
+
+    /* ── Add Nurse ───────────────────────────────────────────────────────── */
+    async function submitNurse() {
+      const data = {
+        id:       document.getElementById('nn_id').value.trim(),
+        name:     document.getElementById('nn_name').value.trim(),
+        password: document.getElementById('nn_pass').value,
+      };
+      if (!data.id || !data.name || !data.password) {
+        adminToast('Please fill all required fields (*)', 'error'); return;
+      }
+      try {
+        const res = await fetch('/api/nurse', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)
+        });
+        const json = await res.json();
+        if (res.ok) {
+          adminToast('✅ Nurse "' + data.name + '" added successfully!');
+          closeModal('addNurseModal');
+          document.getElementById('nn_id').value = '';
+          document.getElementById('nn_name').value = '';
+          document.getElementById('nn_pass').value = '';
+        } else {
+          adminToast(json.error || 'Error adding nurse', 'error');
+        }
+      } catch (err) { adminToast('Network error', 'error'); console.error(err); }
+    }
+
+    /* ── Populate Allot Selects ──────────────────────────────────────────── */
+    async function populateAllotSelects() {
+      try {
+        const [nursesRes, patientsRes] = await Promise.all([
+          fetch('/api/nurses'), fetch('/api/all_patients')
+        ]);
+        const nurses   = await nursesRes.json();
+        const patients = await patientsRes.json();
+
+        const nSel = document.getElementById('al_nurse_id');
+        const pSel = document.getElementById('al_patient_id');
+
+        nSel.innerHTML = '<option value="">— Choose a Nurse —</option>' +
+          nurses.map(n => `<option value="${n.id}">${n.name} (${n.id})</option>`).join('');
+        pSel.innerHTML = '<option value="">— Choose a Patient —</option>' +
+          patients.map(p => `<option value="${p.id}">${p.full_name} (${p.id} · ${p.ward})</option>`).join('');
+      } catch (err) { console.error(err); }
+    }
+
+    /* ── Allot Patient ───────────────────────────────────────────────────── */
+    async function submitAllotment() {
+      const nid = document.getElementById('al_nurse_id').value;
+      const pid = document.getElementById('al_patient_id').value;
+      if (!nid || !pid) { adminToast('Please select both a nurse and patient', 'error'); return; }
+      try {
+        const res = await fetch('/api/allot', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({nurse_id: nid, patient_id: pid})
+        });
+        const json = await res.json();
+        if (res.ok) {
+          adminToast('✅ Patient allotted (exclusive — removed from other nurses)');
+          closeModal('allotModal');
+          setTimeout(() => window.location.reload(), 1800);
+        } else {
+          adminToast(json.error || 'Error allotting', 'error');
+        }
+      } catch (err) { adminToast('Network error', 'error'); console.error(err); }
+    }
+
+    /* ── Discharge Patient ───────────────────────────────────────────────── */
+    async function dischargePatient(pid, name) {
+      if (!confirm('Discharge "' + name + '"?\n\nThis will remove all allotments and delete the patient record.')) return;
+      try {
+        const res = await fetch('/api/patient/' + pid + '/discharge', { method: 'POST' });
+        const json = await res.json();
+        if (res.ok) {
+          adminToast('✅ "' + name + '" has been discharged.');
+          setTimeout(() => window.location.reload(), 1400);
+        } else {
+          adminToast(json.error || 'Error discharging', 'error');
+        }
+      } catch (err) { adminToast('Network error', 'error'); console.error(err); }
+    }
+  </script>
+
+</body>
+</html>

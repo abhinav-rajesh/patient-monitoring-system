@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>MedWatch – Mobile Alerts</title>
+  <link rel="manifest" href="/static/manifest.json" />
+  <meta name="theme-color" content="#0a0f1e" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+  <!-- Pass VAPID public key from Flask to JS -->
+  <script>
+    const VAPID_PUBLIC_KEY = "{{ vapid_public_key }}";
+  </script>
+</head>
+<body class="mobile-body">
+
+  <!-- Header -->
+  <header class="mobile-header">
+    <div class="mobile-header-inner">
+      <div class="mobile-brand">
+        <div class="brand-icon-xs">
+          <svg width="20" height="20" viewBox="0 0 36 36" fill="none">
+            <rect width="36" height="36" rx="9" fill="url(#mGrad)"/>
+            <defs>
+              <linearGradient id="mGrad" x1="0" y1="0" x2="36" y2="36">
+                <stop offset="0%" stop-color="#06b6d4"/>
+                <stop offset="100%" stop-color="#3b82f6"/>
+              </linearGradient>
+            </defs>
+            <path d="M18 8v20M8 18h20" stroke="white" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <span>MedWatch Alerts</span>
+      </div>
+      <div class="mobile-conn" id="mobileConnStatus">
+        <span class="dot connecting"></span>
+        <span id="mobileConnText">Connecting</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Push Notification Setup Card ─────────────────────────────────────── -->
+  <div class="push-setup-card" id="pushSetupCard">
+    <div class="push-setup-inner">
+      <div class="push-icon-ring" id="pushIconRing">
+        <span id="pushIconEmoji">🔔</span>
+      </div>
+      <div class="push-setup-content">
+        <h2 id="pushSetupTitle">Enable Push Alerts</h2>
+        <p id="pushSetupDesc">Get native phone notifications when a patient condition is critical — even when the app is closed.</p>
+      </div>
+    </div>
+
+    <!-- Nurse selector for push -->
+    <div class="push-nurse-row" id="pushNurseRow">
+      <label class="push-label">I am:</label>
+      <div class="push-nurse-btns">
+        <button class="nurse-select-btn active" id="nsBtnNurse1" onclick="selectNurse('nurse1')">
+          <span>👩‍⚕️</span> Sarah (Nurse 1)
+        </button>
+        <button class="nurse-select-btn" id="nsBtnNurse2" onclick="selectNurse('nurse2')">
+          <span>👩‍⚕️</span> Emily (Nurse 2)
+        </button>
+      </div>
+    </div>
+
+    <div class="push-btn-row">
+      <button class="btn-push-enable" id="btnEnablePush" onclick="enablePushNotifications()">
+        <span id="pushBtnIcon">🔔</span>
+        <span id="pushBtnText">Enable Push Notifications</span>
+      </button>
+      <button class="btn-push-test" id="btnTestPush" onclick="sendTestPush()" style="display:none">
+        Send Test Notification
+      </button>
+    </div>
+
+    <!-- Status chip -->
+    <div class="push-status" id="pushStatus">
+      <span class="push-status-dot" id="pushStatusDot"></span>
+      <span id="pushStatusText">Not subscribed</span>
+    </div>
+  </div>
+
+  <!-- Status Banner -->
+  <div class="mobile-status-banner" id="mobileStatusBanner">
+    <div class="banner-icon">🔔</div>
+    <div class="banner-content">
+      <span class="banner-title">Monitoring Active</span>
+      <span class="banner-sub">Real-time patient alerts appear here</span>
+    </div>
+  </div>
+
+  <!-- Stats Row -->
+  <div class="mobile-stats">
+    <div class="m-stat-card">
+      <span class="m-stat-val" id="mTotalAlerts">0</span>
+      <span class="m-stat-lbl">Total Alerts</span>
+    </div>
+    <div class="m-stat-card critical">
+      <span class="m-stat-val" id="mCriticalAlerts">0</span>
+      <span class="m-stat-lbl">Critical</span>
+    </div>
+    <div class="m-stat-card warning">
+      <span class="m-stat-val" id="mWarningAlerts">0</span>
+      <span class="m-stat-lbl">Warning</span>
+    </div>
+  </div>
+
+  <!-- Alert List -->
+  <div class="mobile-content">
+    <div class="mobile-section-header">
+      <h2>Alert Feed</h2>
+      <button class="clear-btn" onclick="clearAlerts()">Clear All</button>
+    </div>
+    <div id="mobileAlertList" class="mobile-alert-list">
+      <div class="mobile-empty-state" id="mobileEmptyState">
+        <div class="empty-icon">🩺</div>
+        <p>All patients are stable</p>
+        <p class="empty-sub">Alerts will appear here instantly</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SOS Button -->
+  <div class="sos-container">
+    <button class="sos-button" id="sosBtn" onclick="triggerSOS()">
+      <span class="sos-icon">🆘</span>
+      <span>Emergency SOS</span>
+    </button>
+  </div>
+
+  <!-- Sound toggle -->
+  <button class="sound-toggle" id="soundToggle" onclick="toggleSound()" title="Toggle alert sound">🔔</button>
+
+  <script src="{{ url_for('static', filename='mobile.js') }}"></script>
+</body>
+</html>

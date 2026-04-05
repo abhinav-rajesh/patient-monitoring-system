@@ -1,0 +1,78 @@
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+
+# ========================
+# Sensitive / Secret Files
+# ========================
+serviceAccountKey.json
+vapid_keys.json
+vapid_private.pem
+vapid_public.pem
+*.pem
+*.key
+.env
+.env.*
+secrets.json
+
+# ========================
+# Database
+# ========================
+instance/
+*.db
+*.sqlite
+*.sqlite3
+
+# ========================
+# Temporary / Scratch
+# ========================
+req.tmp
+*.tmp
+*.log
+
+# ========================
+# Flutter / Dart
+# ========================
+nurse-mobile-app/.dart_tool/
+nurse-mobile-app/build/
+nurse_flutter_app/.dart_tool/
+nurse_flutter_app/build/
+nurse_flutter_app/.flutter-plugins
+nurse_flutter_app/.flutter-plugins-dependencies
+nurse-mobile-app/.flutter-plugins
+nurse-mobile-app/.flutter-plugins-dependencies
+*.g.dart
+
+# ========================
+# Node / JS
+# ========================
+node_modules/
+npm-debug.log*
+
+# ========================
+# OS Files
+# ========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ========================
+# IDE
+# ========================
+.vscode/
+.idea/
+*.suo
+*.user
